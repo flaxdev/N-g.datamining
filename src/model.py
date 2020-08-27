@@ -68,7 +68,7 @@ class Model():
         """
 
         # Pandas rolling is fast
-        windows = self.frame.rolling(window_length, center=True)
+        windows = self.frame.rolling(window_length, center=False)
 
         # For the median model we return the median and variances
         if model == "median":
