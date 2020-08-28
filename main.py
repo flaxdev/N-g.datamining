@@ -4,13 +4,9 @@ from src.anomalies import (Anomaly, SphericalAnomaly, PrismAnomaly, CylindricalA
                            ThinRodAnomaly, OkuboAnomaly, MogiAnomaly)
 from src.geometry import Grid, Position, CoordinateList
 from src.iterators import PropertyIterator, LinearPropertyIterator
-from src.plotting import plotGravityField
 from src.output import saveTimeseries, loadMetadata
-from src.noise import autoRegressionModel
 import matplotlib.pyplot as plt
 from src.model import Model
-from src.forward import singleAscendingSource
-from src.plot import plotCUSUMGraph, plotEOFEigenvalues, plotEOFEigenvectors, plotModel
 from src.cusum import CUSUM
 
 
@@ -47,6 +43,7 @@ if __name__ == '__main__':
         operator = LinearPropertyIterator(
             anomalysteps, [
                 ("normal", (0, strength)),
+                ("deltadensity", (0, -200)),
             ]
         )
 
@@ -69,8 +66,10 @@ if __name__ == '__main__':
         timeseries = list()
 
         for iteration in iterator:
-            source = OkuboAnomaly(Position(500076, 4176413, -3000), density, dip, strike, rake, length, width, slip,
-                                  iteration.normal, fill=fill)
+            # source = OkuboAnomaly(Position(500076, 4176413, -3000), density, dip, strike, rake, length, width, slip,
+            #                       iteration.normal, fill=fill)
+
+            source = SphericalAnomaly(Position(500076, 4176413, -3000), iteration.deltadensity, 500)
 
             results = source.simulate(receiver)
 
@@ -124,26 +123,37 @@ if __name__ == '__main__':
             delay = np.nan #'Not triggered'
 
         ratedelay[itrial] = [strength / anomalysteps, delay]
+
+
         # fig, (ax1, ax2) = plt.subplots(2)
         #
         # ax1.plot(maxdev, label="max CUSUM")
-        # ax1.axvline(x=quietperiod, linewidth=2, color='r')
-        # ax1.axvline(x=quietperiod+anomalysteps, linewidth=1, color='r', linestyle='--')
-        #
+        # # ax1.axvline(x=quietperiod, linewidth=2, color='r')
+        # # ax1.axvline(x=quietperiod+anomalysteps, linewidth=1, color='r', linestyle='--')
+        # ax1.axvspan(quietperiod, quietperiod+anomalysteps,
+        #             facecolor='coral', edgecolor="none",
+        #             alpha=0.2, zorder=-10)
         # if trigger:
         #     ax1.axvline(x=trigger, linewidth=2, color='g')
-        #
+        # ax1.set_title(f'Max CUSUM triggered with delay {delay} ')
         #
         # ax2.plot(timeseries)
+        # ax2.set_title('Gravity')
+        # ax2.set(ylabel='mgal')
+        # ax2.axvspan(quietperiod, quietperiod+anomalysteps,
+        #             facecolor='coral', edgecolor="none",
+        #             alpha=0.2, zorder=-10)
         #
-        # fig.suptitle(f"CUSUM Change Detection triggered with delay {delay} ")
         # plt.show()
+        #
+        # exit()
 
 marker_size = 15
 plt.scatter(ratedelay[:, 0], ratedelay[:, 1], marker_size)
 
 plt.title("CUSUM Anomaly Detection Sensitivity Test")
-plt.xlabel("opening rate [m/sample]")
+# plt.xlabel("opening rate [m/sample]")
+plt.xlabel("density-contrast rate [kg/(m^3 * sample)]")
 plt.ylabel("detection delay [samples]")
 
 plt.show()
