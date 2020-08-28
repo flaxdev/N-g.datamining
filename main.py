@@ -33,103 +33,117 @@ if __name__ == '__main__':
     # Get X, Y, Z receiver coordinates of stations
     receiver = CoordinateList(x, y, heightmap=heightmap)
 
-    anomalysteps = 1000
-    quietperiod = 5000
+    numtrials = 50
+    ratedelay = np.empty((numtrials, 2))
 
-    # Create a linear interpolator for two parameters: position & density over "N" steps
-    operator = LinearPropertyIterator(
-        anomalysteps, [
-            ("normal", (0, 1)),
-        ]
-    )
+    for itrial in range(numtrials):
 
-    # Linear interpolator for different properties: first one, and then the opposite for testing
-    iterator = PropertyIterator([
-        operator
-    ])
+        anomalysteps = 50 * (itrial + 1)
 
-    # OkuboAnomaly Parameters
-    dip = 89.99
-    strike = 90
-    rake = 0
-    length = 10000
-    width = 10000
-    slip = 0
-    density = 2780
-    fill = 2700
+        quietperiod = 5000
+        strength = 0.9 + np.random.rand()/2
 
-    # Save results for timeseries
-    timeseries = list()
+        # Create a linear interpolator for two parameters: position & density over "N" steps
+        operator = LinearPropertyIterator(
+            anomalysteps, [
+                ("normal", (0, strength)),
+            ]
+        )
 
-    for iteration in iterator:
+        # Linear interpolator for different properties: first one, and then the opposite for testing
+        iterator = PropertyIterator([
+            operator
+        ])
 
-        source = OkuboAnomaly(Position(500076, 4176413, -3000), density, dip, strike, rake, length, width, slip, iteration.normal, fill=fill)
+        # OkuboAnomaly Parameters
+        dip = 89.99
+        strike = 90
+        rake = 0
+        length = 10000
+        width = 10000
+        slip = 0
+        density = 2780
+        fill = 2700
 
-        results = source.simulate(receiver)
+        # Save results for timeseries
+        timeseries = list()
 
-        # Save the particular slice of time result
-        timeseries.append(results)
+        for iteration in iterator:
+            source = OkuboAnomaly(Position(500076, 4176413, -3000), density, dip, strike, rake, length, width, slip,
+                                  iteration.normal, fill=fill)
 
-        # Show plot of the field
-        # plotGravityField(receiver, results)
+            results = source.simulate(receiver)
 
-    timeseries = np.array(timeseries)
-    tsbase = np.zeros((quietperiod, timeseries.shape[1]))
-    timeseries = np.append(tsbase, timeseries, axis=0)
-    tspost = tsbase + np.mean(timeseries[-50:], axis=0)
-    timeseries = np.append(timeseries, tspost, axis=0)
+            # Save the particular slice of time result
+            timeseries.append(results)
 
-    # Noise should be added here when the time series are completed
-    noiselevel = 0.03
-    timeseries += np.random.normal(0, noiselevel, timeseries.shape)
+            # Show plot of the field
+            # plotGravityField(receiver, results)
 
-    # ---------------------------------------------------------------------------------
-    # Create a simple data model using a Pandas data frame
-    model = Model(timeseries)
-    # plotModel(model, window_length=1)
+        timeseries = np.array(timeseries)
+        tsbase = np.zeros((quietperiod, timeseries.shape[1]))
+        timeseries = np.append(tsbase, timeseries, axis=0)
+        tspost = tsbase + np.mean(timeseries[-50:], axis=0)
+        timeseries = np.append(timeseries, tspost, axis=0)
 
-    # We can reuse the SimpleModel
-    # Estimate mean for the simple model used in the CUSUM algo
-    means, variances = model.simple(model="mean", window_length=100)
+        # Noise should be added here when the time series are completed
+        noiselevel = 0.03
+        timeseries += np.random.normal(0, noiselevel, timeseries.shape)
 
-    # Get the upper and lower limits from the data frames
-    high, low = CUSUM(model, means, variances, k=noiselevel)
+        # ---------------------------------------------------------------------------------
+        # Create a simple data model using a Pandas data frame
+        model = Model(timeseries)
+        # plotModel(model, window_length=1)
 
-    # Consider the maximum deviation between high and low
-    maxdev = np.max([high, low], axis=0)
+        # We can reuse the SimpleModel
+        # Estimate mean for the simple model used in the CUSUM algo
+        means, variances = model.simple(model="mean", window_length=100)
 
-    # for all the stations
-    maxdev = np.max(maxdev, axis=1)
+        # Get the upper and lower limits from the data frames
+        high, low = CUSUM(model, means, variances, k=noiselevel)
 
-    # set a dection threshold
+        # Consider the maximum deviation between high and low
+        maxdev = np.max([high, low], axis=0)
 
-    detecthres = 40
+        # for all the stations
+        maxdev = np.max(maxdev, axis=1)
 
-    detected = np.nonzero(maxdev > detecthres)
+        # set a dection threshold
 
-    if len(detected[0])>0:
-        trigger = detected[0][0]
-        delay = trigger - quietperiod
-    else:
-        trigger = None
-        delay = 'Not triggered'
+        detecthres = 40
 
+        detected = np.nonzero(maxdev > detecthres)
 
-    fig, (ax1, ax2) = plt.subplots(2)
+        if len(detected[0]) > 0:
+            trigger = detected[0][0]
+            delay = trigger - quietperiod
+            if delay<0:
+                delay = np.nan
+        else:
+            trigger = None
+            delay = np.nan #'Not triggered'
 
-    ax1.plot(maxdev, label="max CUSUM")
-    ax1.axvline(x=quietperiod, linewidth=2, color='r')
-    ax1.axvline(x=quietperiod+anomalysteps, linewidth=1, color='r', linestyle='--')
+        ratedelay[itrial] = [strength / anomalysteps, delay]
+        # fig, (ax1, ax2) = plt.subplots(2)
+        #
+        # ax1.plot(maxdev, label="max CUSUM")
+        # ax1.axvline(x=quietperiod, linewidth=2, color='r')
+        # ax1.axvline(x=quietperiod+anomalysteps, linewidth=1, color='r', linestyle='--')
+        #
+        # if trigger:
+        #     ax1.axvline(x=trigger, linewidth=2, color='g')
+        #
+        #
+        # ax2.plot(timeseries)
+        #
+        # fig.suptitle(f"CUSUM Change Detection triggered with delay {delay} ")
+        # plt.show()
 
-    if trigger:
-        ax1.axvline(x=trigger, linewidth=2, color='g')
+marker_size = 15
+plt.scatter(ratedelay[:, 0], ratedelay[:, 1], marker_size)
 
+plt.title("CUSUM Anomaly Detection Sensitivity Test")
+plt.xlabel("opening rate [m/sample]")
+plt.ylabel("detection delay [samples]")
 
-    ax2.plot(timeseries)
-
-    fig.suptitle(f"CUSUM Change Detection triggered with delay {delay} ")
-    plt.show()
-
-
-
-
+plt.show()
